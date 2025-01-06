@@ -1029,15 +1029,15 @@ MMU работает с таблицами страниц, которые сод
 **Типы векторных инструкций:**
 - Вертикальные:
 
-  ![](images/vertical_instructions.png)
+  ![](.images/vertical_instructions.png)
 
 - Горизонтальные:
 
-  ![](images/horizontal_instructions.png)
+  ![](.images/horizontal_instructions.png)
 
 - Комбинированные:
 
-  ![](images/combination_instructions.png)
+  ![](.images/combination_instructions.png)
 
 **Примеры векторных инструкций:**
 
