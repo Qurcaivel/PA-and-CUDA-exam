@@ -1347,7 +1347,144 @@ MUL R4, R5, R6
 # 28. Спекулятивный суперскалярный процессор
 # 29. EPIC. Механизмы поддержки спекуляции
 # 30. EPIC. Пакет инструкций – способ явного задания параллелизма уровня команд
+
 # 31. Технология OpenMP
+
+**OpenMP (Open Multi-Processing)** - открытый стандарт для распараллеливания программ на языках C, C++ и Fortran.
+Представляет собой спецификацию директив компилятора, библиотечных процедур и переменных окружения, которые предназначены для программирования многопоточных приложений на многопроцессорных системах с общей памятью.
+
+> https://www.openmp.org/about/openmp-faq/#WhatIs
+>
+> OpenMP is a specification for a set of compiler directives, library routines, and environment variables that can be used to specify high-level parallelism in Fortran and C/C++ programs.
+
+**Модель памяти**:
+
+![alt text](.images/LK04-OpenMP-Mem-Model.png)
+
+**Ключевые элементы:**
+- конструкции для создания потоков (директива parallel);
+- конструкции распределения работы между потоками (директивы DO/for и section);
+- конструкции для управления работой с данными (выражения shared и private для определения класса памяти переменных);
+- конструкции для синхронизации потоков (директивы critical, atomic и barrier);
+- процедуры библиотеки поддержки времени выполнения (например, omp_get_thread_num);
+- переменные окружения (например, OMP_NUM_THREADS).
+
+**Пример использования директивы `parallel`**:
+```c++
+double a[N], b[N], c[N];
+int i;
+...
+#pragma omp parallel for shared(a, b, c) private(i)
+for(i = 0; i < N; i++){
+    c[i] = a[i] + b[i];
+}
+```
+
+
+**Пример использования конструкции `reduce`**:
+```c++
+int i, sum = 0;
+
+#pragma omp parallel for reduction(+ : sum)
+for(i = 0; i < 100; i++){
+    sum += array[i];
+}
+```
+
+**Пример использования конструкции `schedule`**:
+```c++
+#pragma omp parallel for schedule(kind [, chunk-size]) 
+for(conditions){ ... }
+
+#pragma omp parallel for schedule(static, 3) 	
+for(int i = 0; i < 20; i++){
+    // 7 чанков (6 на 3 итерации, 1 на 2 итерации)
+}
+```
+
+По умолчанию `chunk-size` равен 1.
+
+**Режимы планирования:**
+- static: чанки статически назначаются потокам в
+группе циклическим образом в порядке их номеров.
+- dynamic: чанки динамически назначаются потокам по готовности выполнения;
+- guided: _кратко - размер чанка динамический; если chunk-size равен 1, размер порции = частному от деления числа неназначенных итераций на число поток, иначе - последовательно уменьшается до k, за исключением последней порции, которая может быть меньше._
+- auto - делегирует решение по выбору на компилятор/рантайм.
+- runtime - зависит от переменной среды `OMP_SCHEDULE`.
+
+> https://610yilingliu.github.io/2020/07/15/ScheduleinOpenMP/
+> https://cs.petrsu.ru/~kulakov/courses/parallel/lect/openmp.pdf
+
+**Конструкции sections**
+
+```c++
+#pragma omp sections
+{
+    #pragma omp section
+    {
+        TaskA();
+    }
+    #pragma omp section
+    {
+        TaskB();
+    }
+}
+```
+
+Каждая секция определяет неявный барьер; TaskA и TaskB выполнятся последовательно относительно друг друга.
+
+> https://dautovri.gitbooks.io/openmp/content/glava3/sections.html
+
+**Барьеры и оператор nowait**
+
+```c++
+#pragma omp parallel
+{
+    // ...
+    #pragma omp barrier
+    // ...
+}
+
+#pragma omp parallel
+{
+    // отсутствие барьера на секции for
+    #pragma omp for nowait
+    for(i = 0; i < 100; i++){
+        compute_something();
+    }
+
+    // наличие барьера на секции for
+    #pragma omp for
+    for(j = 0; j < 500; j++){
+        more_computations();
+    }
+}
+```
+
+**Основной и дополнительные потоки**
+
+```c++
+#pragma omp parallel
+{
+    #pragma omp for
+    for(i = 0; i < 100; i++){
+        fn1();
+    }
+
+    #pragma omp master
+    fn_for_master_only();
+}
+```
+
+**Функции omp**
+
+- int omp_get_num_threads(void);
+- int omp_set_num_threads(int NumThreads);
+- int omp_get_thread_num(void);
+- int omp_get_num_procs(void).
+
+_Примечание: ответ формировался на основе наполнения лекции 04_.
+
 # 32. Задание ядра, потоки и блоки потоков на примере перемножения двух матриц в CUDA
 # 33. Структура ядра и адресация на примере перемножения двух матриц в CUDA
 # 34. Синхронизация потоков, дивергенция потоков, функции голосования в CUDA. Примеры
