@@ -1581,6 +1581,66 @@ void multiplyCuda(T* A, T* B, T* C, unsigned int N)
 ```
 
 # 33. Структура ядра и адресация на примере перемножения двух матриц в CUDA
+
+Структура ядра представлена в примере ниже. В данном случае для выполнения умножения
+используется разделяемая память в которой происходит перемножение блоков из матрицы А и 
+матрицы В. После этого вычисляются глобальные индексы в матрице и локальные индексы в 
+вычисляемых блоках. Причем каждому потоку соответствует свой индекс, поскольку они вычисляются в 
+зависимости от позиции потока в блоке, размерности блока и позиции блока в сетке (`threadIdx.x|y|z`, `blockDim.x|y|z`, `blockIdx.x|y|z`).
+После этого блоки из A и B перемножаются между собой, а результат записывается
+из разделяемой памяти в глобальную.
+
+```cuda
+__global__
+void multiplyCuda(T* A, T* B, T* C, unsigned int N)
+{
+    __shared__ float shared_A[TILE_SIZE][TILE_SIZE];  // блок в разделяемой памяти для блока из матрицы А
+    __shared__ float shared_B[TILE_SIZE][TILE_SIZE];  // блок в разделяемой памяти для блока из матрицы В
+
+    // Вычисление глобального индекса в матрице
+    int globalRow = blockIdx.y * blockDim.y + threadIdx.y;
+    int globalCol = blockIdx.x * blockDim.x + threadIdx.x;
+
+    float Cvalue = 0.0f;
+    
+    // Вычисление локального индекса в блоке
+    int row = threadIdx.y;
+    int col = threadIdx.x;
+
+    // Умножение матрицы (блочный алгоритм)
+    for (int m = 0; m < (N + TILE_SIZE - 1) / TILE_SIZE; ++m)
+    {
+        // Если локальный индекс ряда внутри блока
+        if (row < N && (m * TILE_SIZE + col) < N)
+        {
+            shared_A[row][col] = A[globalRow * N + m * TILE_SIZE + col];
+        } else
+        {
+            shared_A[row][col] = 0.0f;
+        }
+        // Если локальный индекс колонки внутри блока
+        if (col < N && (m * TILE_SIZE + row) < N)
+        {
+            shared_B[row][col] = B[(m * TILE_SIZE + row) * N + globalCol];
+        } else
+        {
+            shared_B[row][col] = 0.0f;
+        }
+        __syncthreads();
+        
+        // Вычисление умножения блоков 
+        for (int k = 0; k < TILE_SIZE; ++k)
+            Cvalue += shared_A[row][k] * shared_B[k][col];
+
+        __syncthreads();
+    }
+    
+    // Запись результата из разделяемой памяти в глобальную
+    if (globalRow < N && globalCol < N)
+        C[globalRow * N + globalCol] = Cvalue;
+}
+```
+
 # 34. Синхронизация потоков, дивергенция потоков, функции голосования в CUDA. Примеры
 # 35. Архитектура современного GPU
 # 36. Понятие occupancy в CUDA. Пример расчета
