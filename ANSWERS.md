@@ -1993,7 +1993,7 @@ char gkernel[9] =
 __global__
 void convGPU(unsigned char* inp, unsigned char* outp, int width, int height)
 {
-    __shared__ float N_ds[w][w];
+    __shared__ unsigned char N_ds[w][w];
     int dest = threadIdx.y * TILE_WIDTH + threadIdx.x,
         destY = dest / w, destX = dest % w,
         srcY = blockIdx.y * TILE_WIDTH + destY,
@@ -2036,9 +2036,94 @@ void convGPU(unsigned char* inp, unsigned char* outp, int width, int height)
 }
 ```
 
-
 # 42. Алгоритм операции инклюзивного scan в CUDA. Пример
+
+Инклюзивный скан - операция сложения всех элементов массива предшествующих некоторому
+элементу j включительно.
+
+Пример:
+[0, 1, 2, 3, 4, 5] -> [0, 1, 3, 6, 10, 15]
+
+```cuda
+__global__
+void inc_scan(T* input, T* output, unsigned long long len)
+{
+    unsigned int i = blockIdx.x*blockDim.x + threadIdx.x;
+    __shared__ float buffer_s[BLOCK_DIM];
+    buffer_s[threadIdx.x] = input[i];
+    __syncthreads();
+    for (unsigned int stride = 1; stride <= BLOCK_DIM/2; stride *= 2)
+    {
+        float v;
+        if (threadIdx.x >= stride)
+        {
+            v = buffer_s[threadIdx.x - stride];
+        }
+        __syncthreads();
+        if (threadIdx.x >= stride)
+        {
+            buffer_s[threadIdx.x] += v;
+        }
+        __syncthreads();
+    }
+    if(threadIdx.x == BLOCK_DIM - 1)
+    {
+        partialSums[blockIdx.x] = buffer_s[threadIdx.x];
+    }
+    output[i] = buffer_s[threadIdx.x];
+}
+```
+
 # 43. Алгоритм операции эксклюзивного scan в CUDA. Пример
+
+
+Эксклюзивный скан - операция сложения всех элементов массива предшествующих некоторому
+элементу j, не включающий сам элемент j.
+
+Пример:
+[0, 1, 2, 3, 4, 5] -> [0, 0, 1, 3, 6, 10]
+
+```cuda
+__global__
+void exc_scan(T* input, T* output, unsigned long long len)
+{
+    unsigned int i = blockIdx.x*blockDim.x + threadIdx.x;
+    __shared__ float buffer1_s[BLOCK_DIM];
+    __shared__ float buffer2_s[BLOCK_DIM];
+    float* inBuffer_s = buffer1_s;
+    float* outBuffer_s = buffer2_s;
+    if (threadIdx.x == 0)
+    {
+        inBuffer_s[threadIdx.x] = 0.0f;
+    }
+    else
+    {
+        inBuffer_s[threadIdx.x] = input[i - 1];
+    }
+    __syncthreads();
+    for (unsigned int stride = 1; stride <= BLOCK_DIM/2; stride *= 2)
+    {
+        if(threadIdx.x >= stride)
+        {
+            outBuffer_s[threadIdx.x] = inBuffer_s[threadIdx.x] + inBuffer_s[threadIdx.x - stride];
+        }
+        else
+        {
+            outBuffer_s[threadIdx.x] = inBuffer_s[threadIdx.x];
+        }
+        __syncthreads();
+        float* tmp = inBuffer_s;
+        inBuffer_s = outBuffer_s;
+        outBuffer_s = tmp;
+    }
+    if(threadIdx.x == BLOCK_DIM - 1)
+    {
+        partialSums[blockIdx.x] = inBuffer_s[threadIdx.x] + input[i];
+    }
+    output[i] = inBuffer_s[threadIdx.x];
+}
+```
+
 # 44. Асинхронное и синхронное копирование в CUDA. Pinned память. Способы выделения
 # 45. CUDA Stream. Создание, инициализация и синхронизация
 # 46. Микроархитектура Intel Knights Landing и ее наследники
