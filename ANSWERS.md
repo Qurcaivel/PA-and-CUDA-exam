@@ -2199,9 +2199,8 @@ cudaError_t cudaHostRegister(
 cudaMallocHost(&aHost , size);
 cudaStreamCreate(&stream1);
 cudaStreamCreate(&stream2);
-cudaMemcpyAsync(aDev, aHost , size,
-cudaMemcpyHostToDevice , stream1);
-kernel <<<grid, block , 0, stream2 >>>(...);
+cudaMemcpyAsync(aDev, aHost, size, cudaMemcpyHostToDevice, stream1);
+kernel <<<grid, block, 0, stream2>>>(...);
 ```
 
 - Если `cudaDeviceProp::concurrentKernels > 0` устройство может выполнять ядра
