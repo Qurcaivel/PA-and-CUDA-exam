@@ -1868,6 +1868,35 @@ cudaError_t cudaBindTexture ( size_t* offset, const textureReference* texref, co
 По скоростным характеристикам локальная память значительно медленнее, чем регистровая.
 
 # 38. Механизм транзакций в CUDA. Пример
+
+Поскольку самая минимальная транзакция - 4 байта, то наиболее эффективным способом
+доступа к памяти будет являться доступ одного потока к последовательным четырем байтам памяти.
+
+![alt text](.images/transaction-optimized-mem-access.png)
+
+Пример кода:
+
+```cuda
+__global__
+void filterGPU(unsigned* inp, unsigned* outp, int pitch, int channels)
+{
+    __shared__ unsigned i_smem[w * w];
+    __shared__ unsigned char buff_smem[w * w * 4];
+    unsigned char* uc_smem = reinterpret_cast<unsigned char*>(i_smem);
+    ...
+    // Запись в разделяемую память интами
+    i_smem[destY * w + destX] = inp[(baseY * pitch) / 4 + baseX];
+    ...
+    // Работаем с unsigned char*
+    buff_smem[base1D] = uc_smem[multY * (threadIdx.y + i) + x1D + j * channels + c];
+    ...
+    // Возвращаем результат работы
+    baseY = blockIdx.y * TILE_WIDTH + threadIdx.y;
+    baseX = blockIdx.x * TILE_WIDTH + threadIdx.x;
+    outp[(baseY * pitch) / 4 + baseX] = reinterpret_cast<unsigned*>(buff_smem)[threadIdx.x + threadIdx.y * w];
+}
+```
+
 # 39. Конфликт по банкам в разделяемой памяти в CUDA. Пример
 # 40. Алгоритм редукции в CUDA. Пример
 # 41. Алгоритм свертки в CUDA. Пример
