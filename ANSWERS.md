@@ -2173,6 +2173,111 @@ cudaError_t cudaHostRegister(
 ```
 
 # 45. CUDA Stream. Создание, инициализация и синхронизация
+
+Технология `CUDA Stream` позволяет при соблюдении ряда условий (как
+аппаратных, так и програмных) организовать параллельное выполнение некоторых
+задач. Особенно удобно при работе с более чем одним gpu.
+
+Все команды, принимающие опциональный параметр типа `cudaStream`
+по-умолчанию используют поток по умолчанию.
+Команды из разных потоков, отличных от потока по-умолчанию, могут исполняться
+параллельно в зависимости от аппаратных возможностей.
+
+Возможные случаи:
+- Параллельные копирование и выполнение ядра
+- Параллельные выполнение ядер
+- Параллельные копирования с хоста на устройство и с устройства на хост
+
+Возможности параллельного выполнения можно проверить при получении свойств
+устройства (структура `cudaDeviceProp`)
+
+- Если `cudaDeviceProp::asyncEngineCount > 0` устройство может выполнять
+параллельно копирование и счет ядра
+  - Хостовая память должна быть page-locked
+
+```cuda
+cudaMallocHost(&aHost , size);
+cudaStreamCreate(&stream1);
+cudaStreamCreate(&stream2);
+cudaMemcpyAsync(aDev, aHost , size,
+cudaMemcpyHostToDevice , stream1);
+kernel <<<grid, block , 0, stream2 >>>(...);
+```
+
+- Если `cudaDeviceProp::concurrentKernels > 0` устройство может выполнять ядра
+параллельно
+
+```cuda
+cudaStreamCreate(&stream1);
+cudaStreamCreate(&stream2);
+kernel1 <<<grid, block, 0, stream1>>>(data_1);
+kernel2 <<<grid, block, 0, stream2>>>(data_2);
+```
+
+- Если `cudaDeviceProp::asyncEngineCount == 2` устройство может выполнять
+параллельно копирование в обе стороны и счет ядра
+
+```cuda
+cudaMallocHost(&aHost, size);
+cudaMallocHost(&bHost, size);
+cudaMemcpyAsync(aDev, aHost, size, cudaMemcpyHostToDevice, stream1);
+cudaMemcpyAsync(bHost, bDev, size, cudaMemcpyDeviceToHost, stream2);
+kernel <<<grid, block, 0, stream3>>>(...);
+```
+
+**Неявная синхронизация**
+
+- Неявная синхронизация (ожидание завершения всех команд на устройтве)
+выполняется перед:
+  - Выделением page-locked памяти / памяти на устройстве
+  - cudaMemSet
+  - Копированием между пересекающимися областями памяти на устройстве
+  - Отправкой команды в поток по-умолчанию
+  - Переключением режима кеша L1
+- Если между отправкой двух команд в разные потоки стоит что-то из этого списка параллельного выполнения не будет
+
+**Синхронизация по событию**
+
+- `cudaError_t cudaEventQuery(cudaEvent_t event)`
+  - Возвращает `cudaSuccess`, если событие уже произошло (вся работа до последнего
+  `cudaEventRecord` выполнена): иначе `cudaErrorNotReady`
+- `cudaError_t cudaEventSynchronize (cudaEvent_t event)`
+  - Возвращает управление хостовой нити только после наступления события
+
+**Синхронизация по GPU**
+
+- cudaError_t cudaStreamWaitEvent
+- (cudaStream_t stream, cudaEvent_t event, unsigned int flags )
+- Команды, отправленные в stream, начнут выполняться после наступления
+события event
+  - Синхронизация будет эффективно выполнена на GPU
+  - При stream == NULL будут отложены все команды всех потоков
+- Событие event может быть записано на другом GPU
+  - Синхронизация между GPU
+
+Пример:
+
+```cuda
+A1<<<1, 1, 0, streamA>>>(d);
+cudaEventRecord(halfA, streamA);
+cudaStreamWaitEvent(streamB, halfA, 0);
+B1<<<1, 1, 0, streamB>>>(d);
+cudaEventRecord(halfB, streamB);
+cudaStreamWaitEvent(streamA, halfB, 0);
+A2<<<1, 1, 0, streamA>>>(d);
+B2<<<1, 1, 0, streamB>>>(d);
+```
+
+**Синхронизация по потоку**
+
+- `cudaError_t cudaStreamQuery (cudaStream_t stream);`
+  - Возвращает `cudaSuccess`, если выполнены все команды в потоке stream, иначе
+  `cudaErrorNotReady`
+
+- `cudaError_t cudaStreamSynchronize (cudaStream_t stream);`
+  - Возвращает управление хостовой нити, когда завершится выполнение всех
+  команд, отправленных в поток stream
+
 # 46. Микроархитектура Intel Knights Landing и ее наследники
 # 47. Микроархитектура Intel Knights Mill
 # 48. Микроархитектура Intel Sunny Cove
