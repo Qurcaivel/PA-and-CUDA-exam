@@ -1972,6 +1972,71 @@ void reduceBase(int* inputData, int* outputData)
 ```
 
 # 41. Алгоритм свертки в CUDA. Пример
+
+Свертка - операция над парой матриц A (размера Nx×Ny) и B (размера Mx×My),
+результатом которой является матрица C=A∗B размера (Nx−Mx+1)×(Ny−My+1).
+
+Каждый элемент результата вычисляется как скалярное произведение матрицы B
+и некоторой подматрицы A такого же размера.
+
+Пример свертки на CUDA:
+
+```cuda
+__constant__
+char gkernel[9] =
+{
+    1, 0, -1,
+    1, 0, -1,
+    1, 0, -1
+};
+
+__global__
+void convGPU(unsigned char* inp, unsigned char* outp, int width, int height)
+{
+    __shared__ float N_ds[w][w];
+    int dest = threadIdx.y * TILE_WIDTH + threadIdx.x,
+        destY = dest / w, destX = dest % w,
+        srcY = blockIdx.y * TILE_WIDTH + destY,
+        srcX = blockIdx.x * TILE_WIDTH + destX,
+        src = (srcY * width + srcX) * channels + c;
+    if (srcY >= 0 && srcY < height && srcX >= 0 && srcX < width)
+        N_ds[destY][destX] = inp[src];
+    else
+        N_ds[destY][destX] = 0;
+
+    dest = threadIdx.y * TILE_WIDTH + threadIdx.x + TILE_WIDTH * TILE_WIDTH;
+    destY = dest / w, destX = dest % w;
+    srcY = blockIdx.y * TILE_WIDTH + destY;
+    srcX = blockIdx.x * TILE_WIDTH + destX;
+    src = (srcY * width + srcX) * channels + c;
+    if (destY < w)
+    {
+        if (srcY >= 1 && srcY < height && srcX >= 1 && srcX < width)
+            N_ds[destY][destX] = inp[src];
+        else
+            N_ds[destY][destX] = 0;
+    }
+    __syncthreads();
+
+    int buff = 0;
+    int y, x;
+    for (y = 0; y < 3; y++)
+    {
+        for (x = 0; x < 3; x++)
+        {
+            buff += N_ds[threadIdx.y + y][threadIdx.x + x] * gkernel[y * 3 + x];
+        }
+    }
+    y = blockIdx.y * TILE_WIDTH + threadIdx.y;
+    x = blockIdx.x * TILE_WIDTH + threadIdx.x;
+    if (y < height && x < width)
+    {
+        outp[y * width + x] = buff < 0 ? 0 : buff > 255 ? 0 : buff;
+    }
+}
+```
+
+
 # 42. Алгоритм операции инклюзивного scan в CUDA. Пример
 # 43. Алгоритм операции эксклюзивного scan в CUDA. Пример
 # 44. Асинхронное и синхронное копирование в CUDA. Pinned память. Способы выделения
